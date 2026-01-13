@@ -1,41 +1,41 @@
-
-require('dotenv').config(); // <-- MOVIDO AL PRINCIPIO: Carga las variables antes que nada
+// server.js
+require('dotenv').config();
 const express = require('express');
-const { OpenAI } = require('openai');
-
 const app = express();
+
 app.use(express.json());
-app.use(express.static('public')); 
+app.use(express.static('public'));
 
-// Verificación de seguridad en la consola
-if (!process.env.OPENAI_API_KEY) {
-    console.error("❌ ERROR: No se encontró la API Key en el archivo .env");
-} else {
-    console.log("✅ API Key detectada correctamente");
-}
-
-const openai = new OpenAI({ 
-    apiKey: process.env.OPENAI_API_KEY 
-});
+const MAKE_WEBHOOK_URL = 'https://hook.us1.make.com/14clq2afkodrphofc172du9wkla7vbjj';
 
 app.post('/chat', async (req, res) => {
     try {
-        const completion = await openai.chat.completions.create({
-            // Aquí definimos el modelo específico. 
-            // Si GPT-5 Nano aún no aparece en tu consola, usa "gpt-4o-mini" temporalmente 
-            // que es el equivalente actual en eficiencia.
-            model: "gpt-5-nano", 
-            messages: req.body.messages,
-            temperature: 0.7, // Ajuste para que sea creativo pero coherente
+        // Obtenemos el último mensaje del usuario
+        const ultimoMensaje = req.body.messages[req.body.messages.length - 1].content;
+
+        // Enviamos la petición a Make tal como el CURL
+        const response = await fetch(MAKE_WEBHOOK_URL, {
+            method: 'POST', // Cambiamos a POST para enviar el body con el prompt
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                "prompt": ultimoMensaje
+            })
         });
-        res.json(completion.choices[0].message);
+
+        const textoRespuesta = await response.text();
+        
+        // Respondemos al frontend con el formato que espera (rol y contenido)
+        res.json({
+            role: "assistant",
+            content: textoRespuesta || "Webhook procesado (sin respuesta de texto)"
+        });
+
     } catch (error) {
-        console.error("Error API:", error.message);
-        res.status(500).json({ error: "Fallo en la conexión con GPT-5 Nano" });
+        console.error("Error en Webhook:", error);
+        res.status(500).json({ role: "assistant", content: "Error al conectar con el Webhook de Make." });
     }
 });
 
-const PORT = 3000;
-app.listen(PORT, () => {
-    console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
-});
+app.listen(3000, () => console.log('🚀 Agente conectado a Make en http://localhost:3000'));
